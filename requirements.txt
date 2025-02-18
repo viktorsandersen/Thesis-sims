@@ -1,0 +1,10 @@
+mujoco
+mujoco-python-viewer
+mediapy
+scipy==1.11.0
+matplotlib
+numpy
+roboticstoolbox-python
+spatialmath-python
+tqdm
+shapely
