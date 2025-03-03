@@ -1,14 +1,13 @@
 <mujoco model="ur5e">
   <compiler angle="radian" meshdir="assets" autolimits="true"/>
-
   <option integrator="implicitfast"/>
 
   <default>
     <default class="ur5e">
       <material specular="0.5" shininess="0.25"/>
       <joint axis="0 1 0" range="-6.28319 6.28319" armature="0.1"/>
-      <general gaintype="fixed" biastype="affine" ctrlrange="-6.2831 6.2831" gainprm="2000" biasprm="0 -2000 -400"
-        forcerange="-150 150"/>
+      <general gaintype="fixed" biastype="affine" ctrlrange="-6.2831 6.2831"
+               gainprm="2000" biasprm="0 -2000 -400" forcerange="-150 150"/>
       <default class="size3">
         <default class="size3_limited">
           <joint range="-3.1415 3.1415"/>
@@ -37,8 +36,9 @@
     <material class="ur5e" name="linkgray" rgba="0.82 0.82 0.82 1"/>
     <material class="ur5e" name="urblue" rgba="0.49 0.678 0.8 1"/>
 
-
-    <material name="pencil_material" rgba="0.9 0.6 0.3 1"/> <!-- Adjust RGBA values as needed -->
+    <!-- Pencil material and mesh removed -->
+    <!-- <material name="pencil_material" ... /> -->
+    <!-- <mesh file="pencil.obj"/> -->
 
     <mesh file="base_0.obj"/>
     <mesh file="base_1.obj"/>
@@ -60,7 +60,6 @@
     <mesh file="wrist2_1.obj"/>
     <mesh file="wrist2_2.obj"/>
     <mesh file="wrist3.obj"/>
-    <mesh file="pencil.obj"/>
   </asset>
 
   <worldbody>
@@ -111,21 +110,14 @@
                 <geom class="collision" pos="0 0.02 0.1" quat="1 1 0 0" size="0.04 0.04"/>
                 <body name="wrist_3_link" pos="0 0 0.1">
                   <inertial mass="0.1889" pos="0 0.0771683 0" quat="1 0 0 1"
-                    diaginertia="0.000132134 9.90863e-05 9.90863e-05"/>
+                            diaginertia="0.000132134 9.90863e-05 9.90863e-05"/>
                   <joint name="wrist_3_joint" class="size1"/>
                   <geom material="linkgray" mesh="wrist3" class="visual"/>
+                  <!-- eef_collision geometry is kept -->
                   <geom class="eef_collision" pos="0 0.08 0" quat="1 1 0 0" size="0.04 0.02"/>
                   <site name="attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
 
-                  <!-- Pencil length is x and the capsul take haf the length as input-->
-                  <!-- x = 0.17 [m] (cirka), x/2 = 0.085 -->
-                  <body name="pencil_gripper" pos="0 0.1 0" quat="1 0 0 1"> <!-- We need to loook at the composition of this body and its elements, the orientations are weird-->
-                      <inertial mass="0.0001" pos="0 0.1 0" diaginertia="0.1 0.1 0.1"/>
-                      <!--<geom mesh="pencil" material="pencil_material" class="visual"/>-->
-                      <geom class="visual" type="capsule"  pos="0.025 0 0" size="0.001 0.025" quat="1 0 1 0"/> 
-                      <geom class="collision" pos="0.025 0 0" size="0.001 0.025" quat="1 0 1 0" condim="3" friction="1 0.005 0.0001" solref="-2500 -1"/> 
-                      <site name="pencil_attachment_site" pos="0 0.1 0" quat="-1 1 0 0"/>
-                  </body>
+                  <!-- The pencil_gripper body is removed entirely -->
                 </body>
               </body>
             </body>
