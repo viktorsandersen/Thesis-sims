@@ -14,20 +14,41 @@
     <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"
       markrgb="0.8 0.8 0.8" width="300" height="300"/>
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
-    <!-- The table material is still defined if needed for other objects -->
+   
+   <!-- Define a new material for the table top -->
     <material name="table_material" rgba="0.8 0.6 0.4 1"/>
+
   </asset>
 
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true"/>
-    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane"
-          solimp="0.99 0.99 0.01" solref="0.001 1" friction="0 0 0"/>
-    
+    <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" solimp="0.99 0.99 0.01" solref="0.001 1"  friction="0 0 0"/>
+
     <camera name="fixed" pos="-2 -2 2" xyaxes="1 -1 0 0.5 0.5 1"/>
     <camera name="fixed2" pos="-1 -1.3 1.3" xyaxes="1 -1 0 0.5 0.5 1"/>
     <camera name="fixed3" pos="-0.5 -0.5 0.1" xyaxes="0 -1 0 0 0 1"/>
     <camera name="fixed4" pos="-0.5 -0.5 0.4" xyaxes="0 -1 0 0 0 1"/>
+
+    <!-- Define the table -->
+  
+    <body name="table" pos="0 -1.4 0.25">
+      
+      <geom name="table_top" type="box" size="1 1 0.05" material="table_material" condim="3" friction="1 0.005 0.0001" solref="-2500 -1"/>
+
+     
+      <body name="table_leg1" pos="-0.5 -0.5 -0.15">
+        <geom name="leg1" type="cylinder" size="0.1 0.10" rgba="0.5 0.5 0.5 1" material="table_material"/>
+      </body>
+      <body name="table_leg2" pos="-0.5 0.5 -0.15">
+        <geom name="leg2" type="cylinder" size="0.1 0.10" rgba="0.5 0.5 0.5 1" material="table_material"/>
+      </body>
+      <body name="table_leg3" pos="0.5 -0.5 -0.15">
+        <geom name="leg3" type="cylinder" size="0.1 0.10" rgba="0.5 0.5 0.5 1" material="table_material"/>
+      </body>
+      <body name="table_leg4" pos="0.5 0.5 -0.15">
+        <geom name="leg4" type="cylinder" size="0.1 0.10" rgba="0.5 0.5 0.5 1" material="table_material"/>
+      </body>
+    </body>
     
-    <!-- The table block has been removed -->
   </worldbody>
 </mujoco>
