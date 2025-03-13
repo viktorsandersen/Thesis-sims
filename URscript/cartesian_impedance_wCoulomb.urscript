@@ -1,0 +1,107 @@
+# Cartesian space impedance controller
+ 
+# UR5, see https://www.universal-robots.com/articles/ur/robot-care-maintenance/max-joint-torques-cb3-and-e-series/
+coulomb = [4.5, 4.6, 3.3, 1.3, 1.4, 1.5]
+# viscous = [9.3, 4.3, 4.9, 1.4, 1.4, 1.9]
+MAX_TORQUE = [150.0, 150.0, 150.0, 28.0, 28.0, 28.0]
+STIFFNESS = [100, 100, 100, 10, 10, 10]
+DAMPING_RATIO = 1 # critical damping
+DAMPING = make_list(6, 0)
+i = 0
+while i < 6:
+    DAMPING[i] = 2 * DAMPING_RATIO * sqrt(STIFFNESS[i])
+    i = i + 1
+end
+ 
+# helper functions
+ 
+def sign(vec):
+    signs = p[0, 0, 0, 0, 0, 0]
+    i = 0
+    while i < 6:
+        if vec[i] > 0:
+            signs[i] = 1
+        elif vec[i] < 0:
+            signs[i] = -1
+        else:
+            signs[i] = 0
+        end
+        i = i + 1
+    end
+    return signs
+end
+    
+
+# pose to list, URScript does not support scalar or list * pose
+def pose_to_list(p):
+    l = [p[0], p[1], p[2], p[3], p[4], p[5]]
+    return l
+end
+ 
+# rotate frame, i.e., pose * v, but only the orientation part of the pose is used
+def rotate_frame(pose, v):
+    rot = p[0, 0, 0, pose[3], pose[4], pose[5]]
+    linear = p[v[0], v[1], v[2], 0, 0, 0]
+    linear_rot = pose_trans(rot, linear)
+    angular = p[v[3], v[4], v[5], 0, 0, 0]
+    angular_rot = pose_trans(rot, angular)
+    return [linear_rot[0], linear_rot[1], linear_rot[2], angular_rot[0], angular_rot[1], angular_rot[2]]
+end
+ 
+# Abs Clamp function
+def clampArray(value, clampValue):
+    pdiff = value - clampValue
+    mdiff = value + clampValue
+    ret = value
+ 
+    j = 0
+    while j < length(value):
+        if pdiff[j] > 0:
+            ret[j] = clampValue[j]
+        elif mdiff[j] < 0:
+            ret[j] = -clampValue[j]
+        end
+        j = j + 1
+    end
+    return ret
+end
+ 
+# initial pose
+target_joint = [d2r(66.32), d2r(-77.26), d2r(100.69), d2r(-113.31), d2r(-89.59), d2r(156.51)]
+movej(target_joint)
+pose_0 = get_target_tcp_pose()
+ 
+# target trajectory is a line in +x
+ 
+timecounter = 0.0
+while True:
+    current_pose = get_target_tcp_pose()
+ 
+    # target pose
+    x_diff = p[0.2 * (1 - cos(timecounter)), 0, 0, 0, 0, 0]
+    target_pose = pose_add(pose_0, x_diff)
+     
+    # error in current frame (TCP)
+    error_in_current_frame = pose_trans(pose_inv(current_pose), target_pose)
+ 
+    # assuming stiffness and damping are defined in the base frame
+    # rotate error to the base frame
+    error_in_base_frame = rotate_frame(current_pose, pose_to_list(error_in_current_frame))
+    # TCP wrench in the base frame
+    wrench = STIFFNESS * error_in_base_frame - DAMPING * pose_to_list(get_target_tcp_speed())
+    # joint torque
+    jacobian = get_jacobian()
+    tau = transpose(jacobian) * wrench
+    # add inertia and coriolis
+    mass_matrix = get_mass_matrix()
+    joint_acc = get_target_joint_accelerations()
+    joint_vel = get_target_joint_speeds()
+    # Maybe get_actual_joint_speeds()?
+    tau = tau +  mass_matrix * joint_acc + get_coriolis_and_centrifugal_torques() + transpose(viscous) * joint_vel + transpose(coulomb) * sign(joint_vel)
+    # clamp target torque
+    tau = clampArray(tau, MAX_TORQUE)
+ 
+    torque_command(tau, friction_comp=False)
+ 
+    timecounter = timecounter + get_steptime()
+end

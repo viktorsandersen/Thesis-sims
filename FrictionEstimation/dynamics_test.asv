@@ -1,0 +1,148 @@
+%% Load Robot Model and Prepare Dynamics Inputs
+robotStruct = load("ur5e.mat");
+robot = robotStruct.robotUR5e;
+
+q = filtered_pos';
+dq = filtered_vel';
+ddq = filtered_acc';
+
+num_samples = size(q, 2);
+
+grav_all = zeros(6, num_samples);
+tau_model  = zeros(6, num_samples);
+jac_all  = cell(1, num_samples);
+inertia_all = cell(6, num_samples);
+vel_prod_all = zeros(6, num_samples);
+
+
+for i = 1:num_samples
+    q_i = q(:, i);
+    dq_i = dq(:, i);
+    ddq_i = ddq(:, i);
+    
+    % Compute gravitational torques, Jacobian, mass matrix, and velocity product
+    grav_all(:, i) = robot.gravityTorque(q_i);
+    jac_all{i} = robot.geometricJacobian(q_i, 'end_effector');
+    inertia_all{i} = robot.massMatrix(q_i);
+    vel_prod_all(:, i) = robot.velocityProduct(q_i, dq_i);
+    
+    % Compute joint torques for the current sample
+    tau_model(:, i) = inertia_all{i} * ddq_i + vel_prod_all(:, i) + grav_all(:, i);
+end
+
+% Now, tau_all contains the computed joint torques for all time samples.
+figure;
+for joint = 1:6
+    subplot(6,1,joint);
+    plot(t, tau_model(joint, :), 'LineWidth', 1.5); hold on;
+    plot(t, avg_phase_torque(:, joint), 'LineWidth', 1.5); hold off;
+    xlabel('Time (s)');
+    ylabel('Torque (Nm)');
+    title(sprintf('Joint %d Torque', joint));
+end
+
+
+%% Regressor matrix
+tau_py = readmatrix('torques.csv');
+tau_py = tau_py';
+tau_fric = avg_phase_torque' - tau_model ; %Measurement - model?
+[numJoints, numSamples] = size(dq);
+
+
+Y = zeros(numJoints * numSamples, 2 * numJoints);
+
+for k = 1:numSamples
+    for i = 1:numJoints
+        % Row index
+        rowIdx = (k - 1) * numJoints + i;
+        % Coulomb
+        Y(rowIdx, i) = sign(dq(i, k));
+        % Viscous
+        Y(rowIdx, numJoints + i) = dq(i, k);
+    end
+end
+
+
+%%
+tau_friction_vec = reshape(tau_fric, [], 1);  % 30k x 1 vector
+
+%Y_first = Y(1:6:end,[1,7]);
+%tau_fric_first = tau_fric(1, :);
+%pi = Y \ tau_friction_vec;
+%pi_1 = linsolve(Y_first, tau_fric_first');
+pi = Y \ tau_friction_vec;
+%pi = linsolve(Y, tau_friction_vec)
+%pi = pinv(Y)*tau_friction_vec
+%pi(11) = pi(11) + 7.0;
+% Extract the friction coefficients for each joint
+f_coulomb = pi(1:6);      
+f_viscous  = pi(7:12);     
+
+% Display the estimated parameters
+disp('Estimated Coulomb friction coefficients:');
+disp(f_coulomb);
+
+%pi(8) = pi(8) - 20.0
+%pi(7:12) = pi(7:12) + 1.0
+%f_v_new = f_viscous + 1.0;
+disp('Estimated Viscous friction coefficients:');
+disp(f_viscous);
+%%
+% Ting der kunne være forkert:
+% FFT fjernelse af støj
+% Y (regressor matrix)
+% Tau_friction_est udregning
+tau_friction_est = reshape(Y * pi, numJoints, numSamples);
+%tau_friction_est_new = Y*pi;
+% pi = 12x1, Y=30k x 12
+%tau_friction_sum = sum(Y * pi);  %  12 x 1 vector
+tau_full_py = tau_py + tau_friction_est; %1,4,5,6
+tau_full_model = tau_model + tau_friction_est; %2,3
+tau_full = zeros(size(tau_py));  % Pre-allocate the matrix with appropriate size
+
+% Assigning values to the correct rows:
+tau_full([1, 4, 5, 6], :) = tau_py + tau_friction_est;  % Rows 1, 4, 5, 6
+tau_full([2, 3], :) = tau_model + tau_friction_est;
+for joint = 1:6
+    subplot(6,1,joint);
+    plot(t, tau_full(joint, :), 'LineWidth', 1.5); hold on;
+    %plot(t, avg_phaseto(joint, :), 'LineWidth', 1.5); hold on;
+    plot(t, avg_phase_torque(:, joint), 'LineWidth', 1.5); hold off;
+    xlabel('Time (s)');
+    ylabel('Torque (Nm)');
+    title(sprintf('Joint %d Torque', joint));
+    legend('full', 'measured'); %'friction','Averaged measured torques');
+end
+
+%% Autocovariance
+
+figure;
+
+for joint = 1:6
+    % Create a subplot for torque (on the left side)
+    subplot(6, 2, 2*joint-1); % 6 rows, 2 columns, odd column for torque plot
+    plot(tau_full(joint, :), 'b-', 'LineWidth', 1.5);
+    hold on;
+    plot(avg_phase_torque(:, joint), 'r--', 'LineWidth', 1.5);
+    hold off;
+    xlabel(sprintf('q%d [rad/s]', joint));  % Joint velocity axis
+    ylabel('Torque [Nm]');
+    title(sprintf('Joint %d Torque', joint));
+    legend('Tau model', 'Averaged Measured');
+    
+    % Create a subplot for autocovariance (on the right side)
+    subplot(6, 2, 2*joint); % 6 rows, 2 columns, even column for autocovariance plot
+    
+    % Center the tau_fric data for autocovariance calculation
+    tau_fric_centered = tau_fric(joint, :) - mean(tau_fric(joint, :));
+    
+    % Compute autocovariance for the joint
+    [autocovariance, lags] = xcov(tau_fric_centered, 'biased'); % 'biased' for normalization
+    
+    % Plot the autocovariance
+    plot(lags, autocovariance, 'b-', 'LineWidth', 1.5);
+    xlabel('Lag');
+    ylabel('Autocovariance');
+    title(sprintf('Autocovariance eτ%d', joint));
+    grid on;
+end
