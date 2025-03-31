@@ -1,0 +1,79 @@
+%% Read Data and Compute Torque
+data = readmatrix('data/robot_data_speedj.csv');
+data = data(1:10000, :);
+% Extract joint positions (for reference) and currents:
+pos = data(:, 2:7);
+actual_current = data(:, 44:49);
+
+% Define parameters for torque calculation
+gear_ratio = 110;
+torque_constants = [0.07695, 0.07695, 0.098322, 0.07695, 0.098322, 0.098322];
+
+% Compute torque for each joint
+torque = zeros(size(actual_current));
+for i = 1:6
+    torque(:, i) = gear_ratio * torque_constants(i) * actual_current(:, i);
+end
+%csvwrite('10kTorque.csv', torque)
+%% Define Butterworth Filtering Parameters
+%-0.3562
+
+   -0.6637
+
+   -0.8315
+
+   -0.0949
+
+   -0.0019
+
+   -0.0534
+
+
+    -7.7739
+
+  -31.7958
+
+   -6.2407
+
+   -2.8434
+
+    2.1957
+
+   -2.0350
+torque = avg_phase_torque_1; % rm
+avg_phase_torque_1(:,1) = avg_phase_torque(:,1) + (-7.7739 + -0.6637);
+avg_phase_torque_2(:,2) = avg_phase_torque(:,2) - 31.4243;
+%avg_phase_torque_3(:,3) = avg_phase_torque(:,3) - 7.4215
+%avg_phase_torque(:,1) = avg_phase_torque(:,1) - 7.4215
+Fs = 1000;       % Sampling frequency in Hz (adjust as needed)
+cutoff = 10;     % Cutoff frequency in Hz
+order = 4;       % Order of the Butterworth filter
+
+% Design the Butterworth filter (normalized cutoff frequency)
+[b, a] = butter(order, cutoff/(Fs/2));
+
+% Create time vector
+L = size(torque, 1);
+t = (0:L-1) / Fs;
+
+%% Apply Butterworth Filter and Plot Results for Each Joint
+%figure;
+x = torque;
+x_filtered = filtfilt(b, a, x); 
+%%
+avg_phase_torque = zeros(10000,6)
+for joint = 1:6
+    x = torque(:, joint);    
+    % Apply zero-phase filtering to avoid phase distortion
+    x_filtered = filtfilt(b, a, x);
+    
+    subplot(6,1,joint);
+    plot(t, x, 'b-', 'LineWidth', 1); hold on;
+    plot(t, x_filtered, 'g-', 'LineWidth', 1.5); hold off;
+    xlabel('Time (s)');
+    ylabel(sprintf('Torque (Nm) - Joint %d', joint));
+    legend('Original', 'Butterworth Filtered');
+    title(sprintf('Joint %d: Butterworth Filtering', joint));
+    avg_phase_torque(:,joint) = x_filtered;
+    disp(avg_phase_torque(1,joint))
+end

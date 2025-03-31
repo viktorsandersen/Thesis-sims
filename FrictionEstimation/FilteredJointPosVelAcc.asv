@@ -1,19 +1,21 @@
 %% Load Data
-data = readmatrix('data/robot_data_ur5_full_speed_wrench_w02k.csv', 'Range', '502:5501');
-target_pos = data(:, 2:7);
-actual_pos = data(:, 32:37);
-target_vel = data(:, 8:13);
-actual_vel = data(:, 38:43); 
-
+%data = readmatrix('data/robot_data_ur5_full_speed_wrench_w02k.csv', 'Range', '502:5501');
+data = readmatrix('data/robot_data_speedj.csv');
+target_pos = data(2:5001, 2:7);
+actual_pos = data(2:5001, 32:37);
+target_vel = data(2:5001, 8:13);
+actual_vel = data(2:5001, 38:43); 
+%actual_pos = avg_phase_pos;
+%actual_vel = avg_phase_vel;
 figure;
 for joint = 1:6
     subplot(6,1,joint);
-    plot(target_pos(:, joint), 'b-', 'LineWidth', 1.5); hold on;
-    plot(actual_pos(:, joint), 'r--', 'LineWidth', 1.5); hold off;
+    %plot(target_pos(:, joint), 'b-', 'LineWidth', 1.5); hold on;
+    plot(actual_pos(:, joint), 'r--', 'LineWidth', 1.5); %hold off;
     xlabel('Sample Index');
     ylabel(sprintf('Joint %d Position', joint));
     title(sprintf('Joint %d: Target vs. Actual Position', joint));
-    legend('Target', 'Actual');
+    legend('Actual');
 end
 
 %% FFT-Based Noise Removal and Frequency-Domain Differentiation for all joints
@@ -30,7 +32,7 @@ else
     f = Fs * (-(L-1)/2:(L-1)/2) / L;
 end
 
-cutoff = 0.1; 
+%cutoff = 110.0; 
 
 filtered_pos = zeros(size(actual_pos));
 filtered_vel = zeros(size(actual_pos));
@@ -55,13 +57,13 @@ for joint = 1:6
     filtered_pos(:, joint) = x_filtered;
     
     % Frequency-Domain Differentiation for Velocity
-    V_shifted = 1j * 2 * pi * f' .* Y_shifted_filtered;
+    V_shifted = 1j * 2 * pi * f' .* Y_shifted_filtered;  % First derivative (velocity)
     V = ifftshift(V_shifted);
     x_dot_filtered = real(ifft(V));
     filtered_vel(:, joint) = x_dot_filtered;
     
-    % Frequency-Domain Differentiation for Acceleration
-    A_shifted = (1j * 2 * pi * f').^2 .* Y_shifted_filtered;
+    % Frequency-Domain Differentiation for Acceleration (same method as velocity)
+    A_shifted = 1j * 2 * pi * f' .* V_shifted;  % First derivative of velocity (acceleration)
     A = ifftshift(A_shifted);
     x_ddot_filtered = real(ifft(A));
     filtered_acc(:, joint) = x_ddot_filtered;
@@ -72,6 +74,7 @@ for joint = 1:6
     x_ddot_gradient = gradient(x_dot_gradient, dt);
     grad_acc(:, joint) = x_ddot_gradient;
 end
+
 
 %% Plotting Results
 
@@ -93,7 +96,7 @@ for joint = 1:6
     subplot(6,1,joint);
     plot(t, filtered_vel(:, joint), 'g', 'LineWidth', 1.5); hold on;
     plot(t, actual_vel(:, joint), 'b--', 'LineWidth', 1.5); 
-    plot(t, target_vel(:, joint), 'r', 'LineWidth', 1.5); hold off;
+    %plot(t, target_vel(:, joint), 'r', 'LineWidth', 1.5); hold off;
     xlabel('Time (s)');
     ylabel('Velocity');
     title(sprintf('Joint %d: Velocity Comparison', joint));
@@ -113,7 +116,7 @@ for joint = 1:6
     title(sprintf('Joint %d: Acceleration Comparison', joint));
     legend('Filtered Acceleration');
 end
-
-csvwrite('posvelacc',filtered_pos,)
-filtered_acc
-filtered_vel,
+%%
+%csvwrite('pos',filtered_pos)
+%csvwrite('acc',filtered_acc)
+%csvwrite('vel',filtered_vel)

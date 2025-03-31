@@ -1,5 +1,67 @@
+%%
+data = readmatrix('AllTorques.csv');
+
+
+%%
+t_phase = linspace(0, 1, period); % normalized time axis (0 to 1 sec)
+figure;
+for joint = 1:6
+    subplot(6,1,joint);
+    plot(t_phase, mean_trajectories(:, joint), 'b-', 'LineWidth', 1.5);
+    xlabel('Time (s)');
+    ylabel(sprintf('Torque (Nm) - Joint %d', joint));
+    legend('Averaged Phase');
+    title(sprintf('Joint %d: Averaged Torque', joint));
+    grid on;
+end
+sgtitle('Aligned & Averaged Torque Trajectories (All 6 Joints)');
 %% Load Data and Compute Torque
-data = readmatrix('data/robot_data_ur5_full_speed_wrench.csv');
+data = readmatrix('data/robot_data_speedj.csv');
+% Split into 10 phases of 10,000 samples each
+%%
+%data = readmatrix('aligned_torques_100k_6.csv');
+%data = readmatrix('aligned_alltorques_fixed.csv');
+
+num_joints = 6;
+period = 10000;
+num_phases = 30; % should be 10 phases
+
+%avg_phase_torque = zeros(period, num_joints); % 10k x 6 matrix
+
+figure;
+for joint = 1:num_joints
+    % Extract the full samples for this joint
+    joint_data = data(:, joint);
+
+    % Ensure exactly 100,000 samples
+    joint_data = joint_data(1:period * num_phases);
+
+    % Reshape into [period x num_phases] matrix
+    joint_phases = reshape(joint_data, period, []);
+
+    % Compute the mean trajectory across phases
+    mean_traj = mean(joint_phases, 2);
+    %avg_phase_torque(:, joint) = mean_traj; % assign to correct column
+    
+    % Plotting in subplots
+    subplot(3, 2, joint);
+    hold on;
+    for i = 1:num_phases
+        plot(joint_phases(:, i), 'DisplayName', ['Phase ' num2str(i)]);
+    end
+    %plot(mean_traj, 'k', 'LineWidth', 2, 'DisplayName', 'Mean Trajectory');
+    hold off;
+    
+    legend show;
+    xlabel('Sample Index (0 to 10,000)');
+    ylabel('Torque Value');
+    title(['Joint ' num2str(joint) ' - Aligned Phases']);
+    grid on;
+end
+
+
+%%
+t_actual = data(:,1);
 actual_current = data(:, 44:49);
 target_pos = data(:, 2:7);
 actual_pos = data(:, 32:37);
@@ -12,65 +74,663 @@ torque = zeros(size(actual_current));
 for i = 1:6
     torque(:, i) = gear_ratio * torque_constants(i) * actual_current(:, i);
 end
+%%
+% Plot all 6 columns of target_vel over the first 10,000 rows
+t = 0:0.002:19.998;
+figure;
+plot(t, target_vel(1:10000, :));
+%title('First 10,000 Samples of target\_vel');
+xlabel('Time [s]');
+ylabel('Joint velocity [ras/s]');
+legend({'$\dot{q}_0$', '$\dot{q}_1$', '$\dot{q}_2$', '$\dot{q}_3$', '$\dot{q}_4$', '$\dot{q}_5$'}, ...
+    'Interpreter', 'latex', 'FontSize', 16);
 
-%% Segment the Data into Phases and Average Them
-phase_length = 5000;               
+%%
+% Diff
+dt = diff(t_actual);
+figure;
+plot(dt);
+ylabel('Time Difference between samples');
+xlabel('Sample Index');
+title('Sample time intervals');
+T_expected = 0.002; % Example: expected 100 Hz sample rate
+threshold = 1.5 * T_expected; % Allow some tolerance
+
+missing_idx = find(dt > threshold);
+fprintf('Number of missing samples: %d\n', length(missing_idx));
+
+% Optional: highlight them on the plot
+hold on;
+plot(missing_idx, dt(missing_idx), 'ro');
+missing_samples_estimate = sum(floor(dt(missing_idx) / T_expected) - 1);
+fprintf('Estimated missing samples: %d\n', missing_samples_estimate);
+
+%%
+%csvwrite('AllTorques.csv', torque)
+%torque = readmatrix('Aligned_AllTorques.csv');
+%torque = readmatrix('Aligned_AllTorques.csv');
+% Flyt dem så de alle krydser 0 samtidig
+% Find average af alle phases og ryk dem så de har det samme
+phase_length = 10000;               
 total_samples = size(torque, 1);
-num_phases = floor(total_samples / phase_length);
+num_phases = 30;
+
 
 avg_phase_torque = zeros(phase_length, 6);
-avg_phase_pos = zeros(phase_length, 6); % For storing the averaged positions
-avg_phase_vel = zeros(phase_length, 6);
+
+
 for joint = 1:6
     torque_reshaped = reshape(torque(1:num_phases*phase_length, joint), phase_length, num_phases);
     avg_phase_torque(:, joint) = mean(torque_reshaped, 2);
-    pos_reshaped = reshape(actual_pos(1:num_phases*phase_length, joint), phase_length, num_phases);
-    avg_phase_pos(:, joint) = mean(pos_reshaped, 2);
-    vel_reshaped = reshape(actual_vel(1:num_phases*phase_length, joint), phase_length, num_phases);
-    avg_phase_vel(:, joint) = mean(vel_reshaped, 2);
+    %pos_reshaped = reshape(actual_pos(1:num_phases*phase_length, joint), phase_length, num_phases);
+    %avg_phase_pos(:, joint) = mean(pos_reshaped, 2);
+    %vel_reshaped = reshape(actual_vel(1:num_phases*phase_length, joint), phase_length, num_phases);
+    %avg_phase_vel(:, joint) = mean(vel_reshaped, 2);
 end
 
 Fs = 1000;          
 t_phase = (0:phase_length-1) / Fs;
-csvwrite('AvgTorques.csv',avg_phase_torque)
-% Create a figure for plotting
+sTorques = torque(1:100000,:);
+
 figure;
-% Loop over each joint to create a subplot for each joint's torque phase
 for joint = 1:6
     subplot(3, 2, joint);  % 3 rows, 2 columns of subplots, one for each joint
     
-    % Loop through each phase and plot it on top of each other
     hold on;
     for phase = 1:num_phases
         start_idx = (phase - 1) * phase_length + 1;
         end_idx = phase * phase_length;
         
-        % Plot each phase on the same axes (overlay phases)
-        plot(1:phase_length, torque(start_idx:end_idx, joint));  % Plot phase torque
+        plot(1:phase_length, torque(start_idx:end_idx, joint));  
     end
     hold off;
     
-    % Set title and labels
     xlabel('Samples in Phase');
     ylabel('Torque (Nm)');
     grid on;
-    xlim([1000 2000]);
-    % Add legend (optional, to identify the phases)
+    %xlim([0 100]);
     legend('show');
 end
+%%
+% New approach, 
+phase_duration = 20; % seconds
+Fs = 500;
+phase_length = Fs * phase_duration;
 
+t_start = t_actual(1);
+t_end = t_actual(end);
+t_phases = t_start : phase_duration : t_end; % Ideal start times of each phase
+
+num_phases = length(t_phases) - 1;
+%avg_phase_torque = zeros(phase_length, 6);
+resampled_phases = zeros(phase_length, 6, num_phases);
+
+for phase = 1:num_phases
+    % Extract samples within phase window
+    t0 = t_phases(phase);
+    t1 = t_phases(phase+1);
+    
+    idx = find(t_actual >= t0 & t_actual < t1);
+    
+    t_phase_actual = t_actual(idx);
+    torque_phase_actual = torque(idx, :);
+    
+    % Resample/interpolate to regular 2ms grid
+    t_uniform = linspace(t0, t1, phase_length); % exactly 10k points
+    
+    for joint = 1:6
+        resampled_phases(:, joint, phase) = interp1(t_phase_actual, torque_phase_actual(:, joint), t_uniform, 'linear', 'extrap');
+    end
+end
+
+for joint = 1:6
+    avg_phase_torque(:, joint) = mean(squeeze(resampled_phases(:, joint, :)), 2);
+end
+figure;
+for joint = 1:6
+    subplot(3, 2, joint);
+    hold on;
+    for phase = 1:num_phases
+        plot(1:phase_length, resampled_phases(:, joint, phase));
+    end
+    hold off;
+    xlabel('Samples in Phase');
+    ylabel('Torque (Nm)');
+    grid on;
+end
+%%
+% Compute average torque across all phases (resulting in a 10,000 x 6 matrix)
+avg_phase_torque_fixed = zeros(phase_length, 6);
+
+% Vectorized mean across the 3rd dimension (phases)
+avg_phase_torque_fixed = mean(resampled_phases, 3); % Output will be [10000 x 6]
+
+figure;
+for joint = 1:6
+    subplot(3, 2, joint);
+    hold on;
+    
+    % Plot all phases (blue) and keep one handle for legend
+    h1 = plot(t, resampled_phases(:, joint, 1), 'Color', [0.2 0.6 1]); % One blue line for legend
+    for phase = 2:num_phases
+        plot(t, resampled_phases(:, joint, phase), 'Color', [0.2 0.6 1]); 
+    end
+    
+    % Plot average phase torque curve (orange)
+    h2 = plot(t, avg_phase_torque_fixed(:, joint), 'Color', [1 0.5 0], 'LineWidth', 2);
+
+    hold off;
+    xlabel('Samples in Phase');
+    ylabel('Torque (Nm)');
+    title(['Joint ', num2str(joint)]);
+    grid on;
+    
+    % Proper legend with correct colors
+    legend([h1, h2], {'Phases', 'Average Torque'}, 'Location', 'best');
+end
+
+
+
+%%
+phase_length = 10000;
+num_phases = 30;
+avg_phase_torque_new = zeros(phase_length, 6);
+Fs = 1000;          
+t_phase = (0:phase_length-1) / Fs;
+
+phase1_data = torque(1:phase_length, 1);
+
+% First crossing (negative to positive)
+zc1_phase1 = find(phase1_data(1:end-1) < 0 & phase1_data(2:end) >= 0, 1, 'first');
+
+% Second crossing (positive to negative)
+zc2_phase1 = find(phase1_data(zc1_phase1+1:end-1) > 0 & phase1_data(zc1_phase1+2:end) <= 0, 1, 'first') + zc1_phase1;
+
+fprintf('Phase 1 Up-cross at %d, Down-cross at %d\n', zc1_phase1, zc2_phase1);
+
+aligned_torque = zeros(size(torque));
+
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    phase_data = torque(start_idx:end_idx, 1);
+    
+    % First crossing (negative to positive)
+    zc1 = find(phase_data(1:end-1) < 0 & phase_data(2:end) >= 0, 1, 'first');
+    
+    % Second crossing (positive to negative)
+    zc2 = find(phase_data(zc1+1:end-1) > 0 & phase_data(zc1+2:end) <= 0, 1, 'first') + zc1;
+    
+    if isempty(zc1) || isempty(zc2)
+        fprintf('Phase %d: Missing crossings, no alignment\n', phase);
+        aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+        continue;
+    end
+
+    % Step 2: shift so first zero-crossing matches Phase 1's
+    shift_amount = zc1_phase1 - zc1;
+    shifted_data = circshift(phase_data, shift_amount);
+    
+    % Step 3: stretch or compress between zc1 and zc2
+    zc2_shifted = zc2 + shift_amount;
+    
+    % Compute new target indices to align second crossing
+    original_duration = zc2_shifted - zc1_phase1;
+    target_duration = zc2_phase1 - zc1_phase1;
+    scale_factor = target_duration / original_duration;
+    
+    % Indices in original signal after shift
+    idx_original = linspace(zc1_phase1, zc2_shifted, round(original_duration * scale_factor));
+    idx_target = zc1_phase1:zc1_phase1 + length(idx_original) - 1;
+    
+    % Interpolate the middle segment
+    warped_segment = interp1(zc1_phase1:zc2_shifted, shifted_data(zc1_phase1:zc2_shifted), idx_original, 'linear', 'extrap');
+    
+    % Step 4: Fill in aligned data
+    aligned_phase = shifted_data;
+    aligned_phase(idx_target) = warped_segment;
+    
+    % Save it to aligned torque matrix
+    aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+    aligned_torque(start_idx:end_idx, 1) = aligned_phase;
+    
+    fprintf('Phase %d: shift=%d, scaled between crossings by %.2f\n', phase, shift_amount, scale_factor);
+end
+
+% Step 5: Plot results
+figure;
+hold on;
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    plot(1:phase_length, aligned_torque(start_idx:end_idx, 1));  
+end
+hold off;
+
+xlabel('Samples in Phase');
+ylabel('Torque (Aligned Up and Down Zero-Crossings)');
+grid on;
+title('Joint 1 Aligned to Both Zero-Crossings (Upward & Downward)');
+
+aligned_joint1 = aligned_torque(1:num_phases*phase_length, 1);
+aligned_joint1_reshaped = reshape(aligned_joint1, phase_length, num_phases);
+avg_phase_joint1 = mean(aligned_joint1_reshaped, 2);
+avg_phase_torque_new(:,1) = avg_phase_joint1
+
+% Step 7: Plot average
+figure;
+plot(1:phase_length, avg_phase_joint1, 'b-', 'LineWidth', 1.5);
+xlabel('Samples in Phase');
+ylabel('Torque (Nm) - Joint 1');
+title('Joint 1: Averaged Torque AFTER Alignment');
+legend('Averaged Phase');
+grid on;
+%%
+phase_length = 10000;
+num_phases = 30;
+avg_phase_torque_2 = zeros(phase_length, 1);
+Fs = 1000;          
+t_phase = (0:phase_length-1) / Fs;
+
+phase2_data = torque(1:phase_length, 2);
+
+% First crossing at -1.3
+zc1_phase4 = find(phase2_data(1:end-1) > -25.0 & phase2_data(2:end) <= -25.0, 1, 'first');
+
+% Second crossing at 1.3
+zc2_phase4 = find(phase2_data(zc1_phase4+1:end-1) < 25.0 & phase2_data(zc1_phase4+2:end) >= 25.0, 1, 'first');
+if isempty(zc2_phase4)
+    warning('Phase 1: Found -1.3 crossing at %d but no 1.3 crossing found later!', zc1_phase4);
+    return;
+end
+zc2_phase4 = zc2_phase4 + zc1_phase4;
+
+fprintf('Phase 1: -1.3 cross at %d, 1.3 cross at %d\n', zc1_phase4, zc2_phase4);
+
+aligned_torque = zeros(size(torque));
+
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    phase_data = torque(start_idx:end_idx, 2);
+    
+    % First crossing at -1.3
+    zc1 = find(phase_data(1:end-1) > -25.0 & phase_data(2:end) <= -25.0, 1, 'first');
+    
+    % Second crossing at 1.3
+    zc2 = find(phase_data(zc1+1:end-1) < 25.0 & phase_data(zc1+2:end) >= 25.0, 1, 'first') + zc1;
+    
+    if isempty(zc1) || isempty(zc2)
+        fprintf('Phase %d: Missing crossings, no alignment\n', phase);
+        aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+        continue;
+    end
+
+    % Step 2: shift so first crossing matches Phase 1's
+    shift_amount = zc1_phase4 - zc1;
+    shifted_data = circshift(phase_data, shift_amount);
+    
+    % Step 3: stretch or compress between zc1 and zc2
+    zc2_shifted = zc2 + shift_amount;
+    
+    % Compute new target indices to align second crossing
+    original_duration = zc2_shifted - zc1_phase4;
+    target_duration = zc2_phase4 - zc1_phase4;
+    scale_factor = target_duration / original_duration;
+    
+    % Indices in original signal after shift
+    idx_original = linspace(zc1_phase4, zc2_shifted, round(original_duration * scale_factor));
+    idx_target = zc1_phase4:zc1_phase4 + length(idx_original) - 1;
+    
+    % Interpolate the middle segment
+    warped_segment = interp1(zc1_phase4:zc2_shifted, shifted_data(zc1_phase4:zc2_shifted), idx_original, 'linear', 'extrap');
+    
+    % Step 4: Fill in aligned data
+    aligned_phase = shifted_data;
+    aligned_phase(idx_target) = warped_segment;
+    
+    % Save it to aligned torque matrix
+    aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+    aligned_torque(start_idx:end_idx, 2) = aligned_phase;
+    
+    fprintf('Phase %d: shift=%d, scaled between crossings by %.2f\n', phase, shift_amount, scale_factor);
+end
+
+% Step 5: Plot all aligned phases
+figure;
+hold on;
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    plot(1:phase_length, aligned_torque(start_idx:end_idx, 2));  
+end
+hold off;
+
+xlabel('Samples in Phase');
+ylabel('Torque (Aligned to -1.3 and 1.3 crossings)');
+grid on;
+title('Joint 4 Aligned to Both Crossings (-1.3 & 1.3)');
+
+% Step 6: Average aligned phases
+aligned_joint2 = aligned_torque(1:num_phases*phase_length, 2);
+aligned_joint2_reshaped = reshape(aligned_joint2, phase_length, num_phases);
+avg_phase_joint2 = mean(aligned_joint2_reshaped, 2);
+avg_phase_torque_new(:,2) = avg_phase_joint2
+% Step 7: Plot average
+figure;
+plot(1:phase_length, avg_phase_joint2, 'b-', 'LineWidth', 1.5);
+xlabel('Samples in Phase');
+ylabel('Torque (Nm) - Joint 4');
+title('Joint 4: Averaged Torque AFTER Alignment');
+legend('Averaged Phase');
+grid on;
+%% Joint 3
+phase_length = 10000;
+num_phases = 30;
+%avg_phase_torque_new = zeros(phase_length, 6);
+Fs = 1000;          
+t_phase = (0:phase_length-1) / Fs;
+
+phase3_data = torque(1:phase_length, 3);
+
+% First crossing (negative to positive) at y = 0
+zc1_phase3 = find(phase3_data(1:end-1) < 0 & phase3_data(2:end) >= 0, 1, 'first');
+
+% Second crossing (positive to negative) at y = 0
+zc2_phase3 = find(phase3_data(zc1_phase3+1:end-1) > 0 & phase3_data(zc1_phase3+2:end) <= 0, 1, 'first') + zc1_phase3;
+
+fprintf('Phase 1 Up-cross at %d, Down-cross at %d\n', zc1_phase3, zc2_phase3);
+
+aligned_torque = zeros(size(torque));
+
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    phase_data = torque(start_idx:end_idx, 3);
+    
+    % First crossing (negative to positive)
+    zc1 = find(phase_data(1:end-1) < 0 & phase_data(2:end) >= 0, 1, 'first');
+    
+    % Second crossing (positive to negative)
+    zc2 = find(phase_data(zc1+1:end-1) > 0 & phase_data(zc1+2:end) <= 0, 1, 'first') + zc1;
+    
+    if isempty(zc1) || isempty(zc2)
+        fprintf('Phase %d: Missing crossings, no alignment\n', phase);
+        aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+        continue;
+    end
+
+    % Step 2: shift so first zero-crossing matches Phase 1's
+    shift_amount = zc1_phase3 - zc1;
+    shifted_data = circshift(phase_data, shift_amount);
+    
+    % Step 3: stretch or compress between zc1 and zc2
+    zc2_shifted = zc2 + shift_amount;
+    
+    % Compute new target indices to align second crossing
+    original_duration = zc2_shifted - zc1_phase3;
+    target_duration = zc2_phase3 - zc1_phase3;
+    scale_factor = target_duration / original_duration;
+    
+    % Indices in original signal after shift
+    idx_original = linspace(zc1_phase3, zc2_shifted, round(original_duration * scale_factor));
+    idx_target = zc1_phase3:zc1_phase3 + length(idx_original) - 1;
+    
+    % Interpolate the middle segment
+    warped_segment = interp1(zc1_phase3:zc2_shifted, shifted_data(zc1_phase3:zc2_shifted), idx_original, 'linear', 'extrap');
+    
+    % Step 4: Fill in aligned data
+    aligned_phase = shifted_data;
+    aligned_phase(idx_target) = warped_segment;
+    
+    % Save it to aligned torque matrix
+    aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+    aligned_torque(start_idx:end_idx, 3) = aligned_phase;
+    
+    fprintf('Phase %d: shift=%d, scaled between crossings by %.2f\n', phase, shift_amount, scale_factor);
+end
+
+% Step 5: Plot results
+figure;
+hold on;
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    plot(1:phase_length, aligned_torque(start_idx:end_idx, 3));  
+end
+hold off;
+
+xlabel('Samples in Phase');
+ylabel('Torque (Aligned Up and Down Zero-Crossings)');
+grid on;
+title('Joint 3 Aligned to Both Zero-Crossings (Upward & Downward)');
+
+aligned_joint3 = aligned_torque(1:num_phases*phase_length, 3);
+aligned_joint3_reshaped = reshape(aligned_joint3, phase_length, num_phases);
+avg_phase_joint3 = mean(aligned_joint3_reshaped, 2);
+avg_phase_torque_new(:,3) = avg_phase_joint3;
+
+% Step 7: Plot average
+figure;
+plot(1:phase_length, avg_phase_joint3, 'b-', 'LineWidth', 1.5);
+xlabel('Samples in Phase');
+ylabel('Torque (Nm) - Joint 3');
+title('Joint 3: Averaged Torque AFTER Alignment');
+legend('Averaged Phase');
+grid on;
+
+%%
+phase4_data = torque(1:phase_length, 4);
+
+% First crossing (negative to positive) at y = 0
+zc1_phase4 = find(phase4_data(1:end-1) < 0 & phase4_data(2:end) >= 0, 1, 'first');
+
+% Second crossing (positive to negative) at y = 0
+zc2_phase4 = find(phase4_data(zc1_phase4+1:end-1) > 0 & phase4_data(zc1_phase4+2:end) <= 0, 1, 'first') + zc1_phase4;
+
+fprintf('Joint 4 - Phase 1 Up-cross at %d, Down-cross at %d\n', zc1_phase4, zc2_phase4);
+
+aligned_torque = zeros(size(torque));
+
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    phase_data = torque(start_idx:end_idx, 4);
+    
+    % First crossing (negative to positive)
+    zc1 = find(phase_data(1:end-1) < 0 & phase_data(2:end) >= 0, 1, 'first');
+    
+    % Second crossing (positive to negative)
+    zc2 = find(phase_data(zc1+1:end-1) > 0 & phase_data(zc1+2:end) <= 0, 1, 'first') + zc1;
+    
+    if isempty(zc1) || isempty(zc2)
+        fprintf('Joint 4 - Phase %d: Missing crossings, no alignment\n', phase);
+        aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+        continue;
+    end
+
+    % Step 2: shift so first zero-crossing matches Phase 1's
+    shift_amount = zc1_phase4 - zc1;
+    shifted_data = circshift(phase_data, shift_amount);
+    
+    % Step 3: stretch or compress between zc1 and zc2
+    zc2_shifted = zc2 + shift_amount;
+    
+    % Compute new target indices to align second crossing
+    original_duration = zc2_shifted - zc1_phase4;
+    target_duration = zc2_phase4 - zc1_phase4;
+    scale_factor = target_duration / original_duration;
+    
+    % Indices in original signal after shift
+    idx_original = linspace(zc1_phase4, zc2_shifted, round(original_duration * scale_factor));
+    idx_target = zc1_phase4:zc1_phase4 + length(idx_original) - 1;
+    
+    % Interpolate the middle segment
+    warped_segment = interp1(zc1_phase4:zc2_shifted, shifted_data(zc1_phase4:zc2_shifted), idx_original, 'linear', 'extrap');
+    
+    % Step 4: Fill in aligned data
+    aligned_phase = shifted_data;
+    aligned_phase(idx_target) = warped_segment;
+    
+    % Save it to aligned torque matrix
+    aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+    aligned_torque(start_idx:end_idx, 4) = aligned_phase;
+    
+    fprintf('Joint 4 - Phase %d: shift=%d, scaled between crossings by %.2f\n', phase, shift_amount, scale_factor);
+end
+
+% Step 5: Plot results
+figure;
+hold on;
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    plot(1:phase_length, aligned_torque(start_idx:end_idx, 4));  
+end
+hold off;
+
+xlabel('Samples in Phase');
+ylabel('Torque (Aligned Up and Down Zero-Crossings)');
+grid on;
+title('Joint 4 Aligned to Both Zero-Crossings (Upward & Downward)');
+
+aligned_joint4 = aligned_torque(1:num_phases*phase_length, 4);
+aligned_joint4_reshaped = reshape(aligned_joint4, phase_length, num_phases);
+avg_phase_joint4 = mean(aligned_joint4_reshaped, 2);
+avg_phase_torque_new(:,4) = avg_phase_joint4;
+
+% Step 7: Plot average
+figure;
+plot(1:phase_length, avg_phase_joint4, 'b-', 'LineWidth', 1.5);
+xlabel('Samples in Phase');
+ylabel('Torque (Nm) - Joint 4');
+title('Joint 4: Averaged Torque AFTER Alignment');
+legend('Averaged Phase');
+grid on;
+%%
+phase5_data = torque(1:phase_length, 5);
+
+% First crossing (negative to positive)
+zc1_phase5 = find(phase5_data(1:end-1) < 0 & phase5_data(2:end) >= 0, 1, 'first');
+
+% Second crossing (positive to negative)
+zc2_phase5 = find(phase5_data(zc1_phase5+1:end-1) > 0 & phase5_data(zc1_phase5+2:end) <= 0, 1, 'first') + zc1_phase5;
+
+fprintf('Joint 5 - Phase 1 Up-cross at %d, Down-cross at %d\n', zc1_phase5, zc2_phase5);
+
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    phase_data = torque(start_idx:end_idx, 5);
+
+    zc1 = find(phase_data(1:end-1) < 0 & phase_data(2:end) >= 0, 1, 'first');
+    zc2 = find(phase_data(zc1+1:end-1) > 0 & phase_data(zc1+2:end) <= 0, 1, 'first') + zc1;
+
+    if isempty(zc1) || isempty(zc2)
+        fprintf('Joint 5 - Phase %d: Missing crossings, no alignment\n', phase);
+        aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+        continue;
+    end
+
+    shift_amount = zc1_phase5 - zc1;
+    shifted_data = circshift(phase_data, shift_amount);
+    zc2_shifted = zc2 + shift_amount;
+
+    original_duration = zc2_shifted - zc1_phase5;
+    target_duration = zc2_phase5 - zc1_phase5;
+    scale_factor = target_duration / original_duration;
+
+    idx_original = linspace(zc1_phase5, zc2_shifted, round(original_duration * scale_factor));
+    idx_target = zc1_phase5:zc1_phase5 + length(idx_original) - 1;
+
+    warped_segment = interp1(zc1_phase5:zc2_shifted, shifted_data(zc1_phase5:zc2_shifted), idx_original, 'linear', 'extrap');
+
+    aligned_phase = shifted_data;
+    aligned_phase(idx_target) = warped_segment;
+
+    aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+    aligned_torque(start_idx:end_idx, 5) = aligned_phase;
+end
+
+aligned_joint5 = aligned_torque(1:num_phases*phase_length, 5);
+aligned_joint5_reshaped = reshape(aligned_joint5, phase_length, num_phases);
+avg_phase_joint5 = mean(aligned_joint5_reshaped, 2);
+avg_phase_torque_new(:,5) = avg_phase_joint5;
+%%
+phase6_data = torque(1:phase_length, 6);
+
+% First crossing (negative to positive)
+zc1_phase6 = find(phase6_data(1:end-1) < 0 & phase6_data(2:end) >= 0, 1, 'first');
+
+% Second crossing (positive to negative)
+zc2_phase6 = find(phase6_data(zc1_phase6+1:end-1) > 0 & phase6_data(zc1_phase6+2:end) <= 0, 1, 'first') + zc1_phase6;
+
+fprintf('Joint 6 - Phase 1 Up-cross at %d, Down-cross at %d\n', zc1_phase6, zc2_phase6);
+
+for phase = 1:num_phases
+    start_idx = (phase - 1) * phase_length + 1;
+    end_idx = phase * phase_length;
+    phase_data = torque(start_idx:end_idx, 6);
+
+    zc1 = find(phase_data(1:end-1) < 0 & phase_data(2:end) >= 0, 1, 'first');
+    zc2 = find(phase_data(zc1+1:end-1) > 0 & phase_data(zc1+2:end) <= 0, 1, 'first') + zc1;
+
+    if isempty(zc1) || isempty(zc2)
+        fprintf('Joint 6 - Phase %d: Missing crossings, no alignment\n', phase);
+        aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+        continue;
+    end
+
+    shift_amount = zc1_phase6 - zc1;
+    shifted_data = circshift(phase_data, shift_amount);
+    zc2_shifted = zc2 + shift_amount;
+
+    original_duration = zc2_shifted - zc1_phase6;
+    target_duration = zc2_phase6 - zc1_phase6;
+    scale_factor = target_duration / original_duration;
+
+    idx_original = linspace(zc1_phase6, zc2_shifted, round(original_duration * scale_factor));
+    idx_target = zc1_phase6:zc1_phase6 + length(idx_original) - 1;
+
+    warped_segment = interp1(zc1_phase6:zc2_shifted, shifted_data(zc1_phase6:zc2_shifted), idx_original, 'linear', 'extrap');
+
+    aligned_phase = shifted_data;
+    aligned_phase(idx_target) = warped_segment;
+
+    aligned_torque(start_idx:end_idx, :) = torque(start_idx:end_idx, :);
+    aligned_torque(start_idx:end_idx, 6) = aligned_phase;
+end
+
+aligned_joint6 = aligned_torque(1:num_phases*phase_length, 6);
+aligned_joint6_reshaped = reshape(aligned_joint6, phase_length, num_phases);
+avg_phase_joint6 = mean(aligned_joint6_reshaped, 2);
+avg_phase_torque_new(:,6) = avg_phase_joint6;
+%% ---- Averaging ---- %%
+for joint = [5 6]
+    joint_data = aligned_torque(1:num_phases*phase_length, joint);
+    reshaped_data = reshape(joint_data, phase_length, num_phases);
+    avg_phase = mean(reshaped_data, 2);
+    avg_phase_torque_new(:,joint) = avg_phase
+    figure;
+    plot(1:phase_length, avg_phase, 'b-', 'LineWidth', 1.5);
+    xlabel('Samples in Phase');
+    ylabel(sprintf('Torque (Nm) - Joint %d', joint));
+    title(sprintf('Joint %d: Averaged Torque AFTER Alignment', joint));
+    legend('Averaged Phase');
+    grid on;
+end
 
 %% Plot average torque
 figure;
 for joint = 1:6
     subplot(6,1,joint);
     plot(t_phase, avg_phase_torque(:, joint), 'b-', 'LineWidth', 1);
-    %hold on;
-    %plot(t_phase, avg_phase_torque_filtered(:, joint), 'g-', 'LineWidth', 1.5);
-    %hold off;
+    hold on;
+    plot(t_phase, avg_phase_torque_new(:, joint), 'g-', 'LineWidth', 1.5);
+    hold off;
     xlabel('Time (s)');
     ylabel(sprintf('Torque (Nm) - Joint %d', joint));
-    legend('Averaged Phase');
+    legend('Averaged Phase', 'new averaged phase');
     title(sprintf('Joint %d: Averaged Torque', joint));
 end
 %% Design and Apply the Butterworth Filter

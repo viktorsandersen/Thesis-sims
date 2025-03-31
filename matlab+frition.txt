@@ -1,0 +1,50 @@
+usr/local/MATLAB/R2024b/bin$ ./matlab
+no fric:
+Rise time = 891
+Settling time = 
+Overshoot =0.9181
+Steady state error = 0.2468
+
+fric compensated (UR):
+Rise time =1979
+Settling time = 
+Overshoot =0.8
+Steady state error = 0.039
+
+10.3:
+Rise time = 319
+Settling time = 
+Overshoot = 0.5366
+Steady state error = 0.2172
+
+4.5, 9.3:
+Rise time = 351
+Settling time = 
+Overshoot = 0.32
+Steady state error = 0.037
+
+%%%%%%%%%%%%%%%%%%%%%
+
+no fric:
+Rise time = 92
+Settling time = 
+Overshoot =6.15e-05
+Steady state error = 0.2695
+
+fric compensated (UR):
+Rise time =80
+Settling time = 
+Overshoot =0.0019
+Steady state error = 0.0016
+
+10.3:
+Rise time = 253
+Settling time = 
+Overshoot = 0.4674
+Steady state error = 0.0112
+
+4.5, 9.3:
+Rise time = 351
+Settling time = 
+Overshoot = 0.32
+Steady state error = 0.037

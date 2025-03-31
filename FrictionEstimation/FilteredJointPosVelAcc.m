@@ -1,21 +1,22 @@
 %% Load Data
 %data = readmatrix('data/robot_data_ur5_full_speed_wrench_w02k.csv', 'Range', '502:5501');
-
-%target_pos = data(:, 2:7);
-%actual_pos = data(:, 32:37);
-%target_vel = data(:, 8:13);
-%actual_vel = data(:, 38:43); 
-actual_pos = avg_phase_pos;
-actual_vel = avg_phase_vel;
+data = readmatrix('data/robot_data_speedj.csv');
+target_pos = data(2:10001, 2:7);
+actual_pos = data(2:10001, 32:37);
+target_vel = data(2:10001, 8:13);
+actual_vel = data(2:10001, 38:43); 
+%actual_pos = avg_phase_pos;
+%actual_vel = avg_phase_vel;
+%%
 figure;
 for joint = 1:6
     subplot(6,1,joint);
-    %plot(target_pos(:, joint), 'b-', 'LineWidth', 1.5); hold on;
+    plot(actual_vel(:, joint), 'b-', 'LineWidth', 1.5); hold on;
     plot(actual_pos(:, joint), 'r--', 'LineWidth', 1.5); %hold off;
     xlabel('Sample Index');
     ylabel(sprintf('Joint %d Position', joint));
     title(sprintf('Joint %d: Target vs. Actual Position', joint));
-    legend('Target', 'Actual');
+    legend('Actual_vel','actual pos');
 end
 
 %% FFT-Based Noise Removal and Frequency-Domain Differentiation for all joints
@@ -75,7 +76,18 @@ for joint = 1:6
     grad_acc(:, joint) = x_ddot_gradient;
 end
 
-
+figure;
+plot(f, abs(Y_shifted), 'b', 'LineWidth', 1.5);
+hold on;
+% Plot vertical cutoff lines at +cutoff and -cutoff frequencies
+plot([cutoff cutoff], ylim, 'r--', 'LineWidth', 2);
+plot([-cutoff -cutoff], ylim, 'r--', 'LineWidth', 2);
+xlabel('Frequency (Hz)');
+ylabel('Magnitude');
+title('FFT Magnitude with Noise Removal Cutoff');
+grid on;
+legend('FFT Magnitude', 'Cutoff Frequency');
+hold off;
 %% Plotting Results
 
 % Plot Filtered vs. Actual Position for all joints
@@ -100,7 +112,7 @@ for joint = 1:6
     xlabel('Time (s)');
     ylabel('Velocity');
     title(sprintf('Joint %d: Velocity Comparison', joint));
-    legend('Filtered', 'Actual', 'Target');
+    legend('Filtered', 'Actual');
 end
 
 % Plot Acceleration: Frequency-Domain Differentiated for all joints
@@ -117,6 +129,6 @@ for joint = 1:6
     legend('Filtered Acceleration');
 end
 %%
-%csvwrite('pos',filtered_pos)
-%csvwrite('acc',filtered_acc)
-%csvwrite('vel',filtered_vel)
+%csvwrite('pos.csv',filtered_pos)
+%csvwrite('acc.csv',filtered_acc)
+%csvwrite('vel.csv',filtered_vel)

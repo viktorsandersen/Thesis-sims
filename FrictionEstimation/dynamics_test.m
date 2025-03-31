@@ -1,3 +1,18 @@
+% New Friction
+% Estimated Coulomb friction coefficients:
+    %4.7660
+    %4.7297
+    %3.3605
+    %1.3626
+    %1.5072
+    %1.5103
+% Estimated Viscous friction coefficients:
+    %9.7945
+    %6.0775
+    %4.5132
+    %1.5348
+    %1.3233
+    %3.2397
 %% Load Robot Model and Prepare Dynamics Inputs
 robotStruct = load("ur5e.mat");
 robot = robotStruct.robotUR5e;
@@ -43,9 +58,11 @@ end
 
 
 %% Regressor matrix
-tau_py = readmatrix('torques.csv');
+tau_py = readmatrix('torques 1.csv');
 tau_py = tau_py';
-tau_fric = avg_phase_torque' - tau_model ; %Measurement - model?
+tau_py(4,:) = tau_py(4,:) - 0.25;
+tau_py(3,:) = tau_py(3,:) + 0.25;
+tau_fric = avg_phase_torque_new' - tau_py ; %Measurement - model?
 [numJoints, numSamples] = size(dq);
 
 
@@ -92,29 +109,114 @@ disp(f_viscous);
 % FFT fjernelse af støj
 % Y (regressor matrix)
 % Tau_friction_est udregning
-pi = [4.5, 4.6, 3.3, 1.3, 1.4, 1.5, 9.3, 4.3, 4.9, 1.4, 1.4, 1.9]'
+%pi = [4.5, 4.6, 3.3, 1.3, 1.4, 1.5, 9.3, 4.3, 4.9, 1.4, 1.4, 1.9]'
 tau_friction_est = reshape(Y * pi, numJoints, numSamples);
 %tau_friction_est_new = Y*pi;
 % pi = 12x1, Y=30k x 12
 %tau_friction_sum = sum(Y * pi);  %  12 x 1 vector
-tau_full_py = tau_py + tau_friction_est; %1,4,5,6
-tau_full_model = tau_model + tau_friction_est; %2,3
-tau_full = zeros(6,5000);  % Pre-allocate the matrix with appropriate size
+%tau_full_py = tau_py + tau_friction_est; %1,4,5,6
+tau_full = tau_py + tau_friction_est; %2,3
+%tau_full = zeros(6,5000);  % Pre-allocate the matrix with appropriate size
 
 % Assigning values to the correct rows:
-tau_full([1, 4, 5, 6], :) = tau_py([1, 4, 5, 6], :) + tau_friction_est([1, 4, 5, 6], :);
-tau_full([2, 3], :) = tau_model([2,3], :) + tau_friction_est([2,3], :);
+%tau_full([1, 4, 5, 6], :) = tau_py([1, 4, 5, 6], :) + tau_friction_est([1, 4, 5, 6], :);
+%tau_full([2, 3], :) = tau_model([2,3], :) + tau_friction_est([2,3], :);
 for joint = 1:6
     subplot(6,1,joint);
     plot(t, tau_full(joint, :), 'LineWidth', 1.5); hold on;
-    %plot(t, avg_phaseto(joint, :), 'LineWidth', 1.5); hold on;
-    plot(t, avg_phase_torque(:, joint), 'LineWidth', 1.5); hold off;
+    %plot(t, tau_friction_est(joint, :), 'LineWidth', 1.5); hold on;
+    plot(t, avg_phase_torque_2(:, joint), 'LineWidth', 1.5); hold off;
+    disp(tau_full(joint,1))
+    %disp(avg_phase_torque(joint,1))
+    %disp(tau_full(joint,1)-avg_phase_torque(joint,1))
     xlabel('Time (s)');
     ylabel('Torque (Nm)');
     title(sprintf('Joint %d Torque', joint));
-    legend('full', 'measured'); %'friction','Averaged measured torques');
+    legend('Dynamic model and estimated friction', 'Measured torques'); %'friction','Averaged measured torques');
+end
+%%
+error = avg_phase_torque_fixed - tau_py'; % [10000 x 6]
+figure;
+for joint = 1:6
+    subplot(3, 2, joint);
+    plot(target_vel(:, joint), error(:, joint));
+    
+    % Apply different x-limits based on joint number
+    if joint >= 4
+        xlim([-0.2 0.2]);
+    else
+        xlim([-0.3 0.3]);
+    end
+
+    xlabel(['$\dot{q}_{', num2str(joint - 1), '}$ (rad/s)'], 'Interpreter', 'latex', 'FontSize', 16);
+    ylabel('Torque Error (Nm)');
+    grid on;
+
+    legend(['$e_{\tau_{', num2str(joint - 1), '}}$'], ...
+           'Interpreter', 'latex', 'FontSize', 20, 'Location', 'best');
 end
 
+maxlag = 50;
+
+figure;
+for joint = 1:6
+    subplot(3, 2, joint);
+    
+    [c, lags] = xcov(error(:, joint), maxlag, 'normalized');
+    stem(lags, c);
+
+    xlabel('Lag');
+    title(['Autocovariance of $e_{\tau_{', num2str(joint - 1), '}}$'], 'Interpreter', 'latex', 'FontSize', 18);
+    grid on;
+end
+
+%%
+error = avg_phase_torque_fixed - tau_py'; % [10000 x 6]
+maxlag = 50;
+% Set up a 6-row, 2-column layout
+fig = figure;
+t = tiledlayout(6, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
+
+for joint = 1:6
+    % Left column: Hysteresis
+    nexttile(2*joint - 1);
+    plot(target_vel(:, joint), error(:, joint));
+    
+    % X-axis limits
+    if joint >= 4
+        xlim([-0.2 0.2]);
+    else
+        xlim([-0.3 0.3]);
+    end
+
+    % Add xlabel to every subplot for clarity
+    xlabel(['$\dot{q}_{', num2str(joint - 1), '}$ (rad/s)'], 'Interpreter', 'latex', 'FontSize', 14);
+
+    % Only add y-label once (middle left)
+    if joint == 3
+        ylabel('Torque [Nm]', 'FontSize', 14);
+    end
+
+    %title(['$e_{\tau_{', num2str(joint - 1), '}}$ vs $\dot{q}_{', num2str(joint - 1), '}$'], ...
+          %'Interpreter', 'latex', 'FontSize', 12);
+    
+    legend(['$e_{\tau_{', num2str(joint - 1), '}}$'], 'Interpreter', 'latex', 'FontSize', 18, 'Location', 'best');
+    grid on;
+
+    % Right column: Autocovariance
+    nexttile(2*joint);
+    [c, lags] = xcov(error(:, joint), maxlag, 'normalized');
+    stem(lags, c, 'filled');
+    
+    % Only put xlabel for the bottom autocovariance plot
+    if joint == 6
+        xlabel('Lag', 'FontSize', 16);
+    end
+
+    title(['Autocovariance $e_{\tau_{', num2str(joint - 1), '}}$'], ...
+          'Interpreter', 'latex', 'FontSize', 16);
+    grid on;
+end
 %% Autocovariance
 
 figure;
