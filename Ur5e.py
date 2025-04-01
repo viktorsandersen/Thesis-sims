@@ -10,7 +10,7 @@ class Ur5e:
         self.m = mujoco.MjModel.from_xml_path('universal_robots_ur5e/scene.xml')
         self.d = mujoco.MjData(self.m)
         self.joints = [0,0,0,0,0,0,0]
-        self.dt = 0.002                 # Time step, should be the same as the mujoco simulation
+        self.dt = 0.001                 # Time step, should be the same as the mujoco simulation
         self.geom_names       = [mujoco.mj_id2name(self.m,mujoco.mjtObj.mjOBJ_GEOM,x)
                                 for x in range(self.m.ngeom)]
         # Universal Robot UR5e kiematics parameters
