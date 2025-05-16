@@ -1,0 +1,43 @@
+# URScript with a basic PID controller
+def pid_joint_control():
+    # PID gains
+    Kp = [50, 50, 50, 30, 20, 10]
+    Ki = [0.1, 0.1, 0.1, 0.05, 0.05, 0.01]
+    Kd = [2, 2, 2, 1, 1, 0.5]
+    
+    # Initialize integrator and previous error
+    integral = [0, 0, 0, 0, 0, 0]
+    prev_error = [0, 0, 0, 0, 0, 0]
+    
+    # Control loop parameters
+    dt = 0.008  # Control loop time step ~8ms
+    t = 0.0
+    run_time = 10.0  # Run for 10 seconds
+    
+    while (t < run_time):
+        # Current joint positions
+        q = get_actual_joint_positions()
+        
+        # Desired trajectory: simple sine wave on joint 1, rest hold position
+        qd = [sin(2 * 3.14 * 0.1 * t), 0.0, 0.0, 0.0, 0.0, 0.0]
+        
+        # Compute PID control for each joint
+        tau = [0, 0, 0, 0, 0, 0]
+        i = 0
+        while (i < 6):
+            error = qd[i] - q[i]
+            integral[i] = integral[i] + error * dt
+            derivative = (error - prev_error[i]) / dt
+            tau[i] = Kp[i] * error + Ki[i] * integral[i] + Kd[i] * derivative
+            prev_error[i] = error
+            i = i + 1
+        
+        # Send torque commands
+        servoj(q, 0, 0, 0, 0, 0.008)
+        set_joint_torques(tau)
+        
+        # Sleep for control loop
+        sleep(dt)
+        t = t + dt
+
+end

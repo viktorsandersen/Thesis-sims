@@ -1,0 +1,45 @@
+global_input_0 = 0.0
+..
+global_input_5 = 0.0
+
+thread infoThread():
+    while True:
+        mass_mat = [[0,0,0,0][0,0,0,0]]
+        cori_vec = [0,0,0] #get_coriolis_and_centrifugal_torques
+        mat_size = size(mass_mat)
+        vec_size
+
+        i=0
+        ele_count = 0
+        while i < mat_size[0]:
+        j = 0
+            while j < mat_size[1]:
+                write_output_float_register(ele_count, mass_mat[i,j])
+                j = j + 1
+                ele count = ele_count + 1
+                end
+                i = i + 1
+            end
+            i = 0
+            while i < vec_size:
+                write_output_float_register(ele_count, cori_vec[i])
+                ele_count = ele_count+1
+                i = i + 1
+            end
+        end
+    end
+    current_value = read_output_integer_register(0)
+    new_value = 0
+    if current_value == 0:
+        new_value = 1
+    end
+    write_output_integer_register(0, new_value)
+    global torque_target = [0,0,0,0,0,0]
+    thrd = run infoThread()
+
+    while True:
+        torque_target = [0.0, 0.0,0 .0.0,0,0.0]
+        torque_target[3] = read_input_float_register(45)
+        torque_target = clampArray(torque_target, maxTorque)
+        torque_command
+    end

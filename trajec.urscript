@@ -1,0 +1,22 @@
+global timecounter = 0.0
+w_f = 3.141592 / 10
+
+K = [0.5, 3, 6]
+target_q = [d2r(0), d2r(-90), d2r(0), d2r(-90), d2r(0), d2r(0)]
+a = [[0.6, 0.0, 0.0], [0.6, 0.0, 0.0], [0.6, 0.0, 0.0], [1.1, 0.0, 0.0], [1.1, 0.0, 0.0], [1.5, 0.0, 0.0]]
+b = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0, 0.0, 0.0]]
+movej(target_q)
+while True:
+    i = 0
+    while i < 6:
+        k = 0
+        while k < 3:
+            target_q[i] = target_q[i] + (a[i,k] * sin(K[k] * w_f * timecounter) + b[i,k] * cos(K[k] * w_f * timecounter))
+            k = k + 1
+        end
+        i = i + 1     
+    end
+    movej(target_q)
+    
+    timecounter = timecounter + get_steptime() 
+end

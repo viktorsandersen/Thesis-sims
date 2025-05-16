@@ -1,0 +1,31 @@
+Kp = [50, 50, 50, 30, 20, 10]
+Ki = [0.1, 0.1, 0.1, 0.05, 0.05, 0.01]
+Kd = [2, 2, 2, 1, 1, 0.5]
+
+integral = [0, 0, 0, 0, 0, 0]
+prev_error = [0, 0, 0, 0, 0, 0]
+
+dt = 0.002 
+t = 0.0
+run_time = 10.0 
+
+while (t < run_time):
+    q = get_actual_joint_positions()
+    qd = [sin(2 * 3.14 * 0.1 * t), 0.0, 0.0, 0.0, 0.0, 0.0]
+
+    tau = [0, 0, 0, 0, 0, 0]
+    i = 0
+    while (i < 6):
+        error = qd[i] - q[i]
+        integral[i] = integral[i] + error * dt
+        derivative = (error - prev_error[i]) / dt
+        tau[i] = Kp[i] * error + Ki[i] * integral[i] + Kd[i] * derivative
+        prev_error[i] = error
+        i = i + 1
+        end
+
+    movel(tau)
+
+    t = t + dt
+    end
+end
